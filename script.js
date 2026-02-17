@@ -21,6 +21,8 @@
   let board = Array(9).fill(EMPTY);
   let gameOver = false;
   let currentTurn = PLAYER;
+  let isComputerThinking = false;
+  let computerMoveTimeout = null;
 
   // Light-weight generated tones to avoid external sound files.
   function playTone({ frequency, duration = 0.1, type = 'sine', volume = 0.05 }) {
@@ -61,7 +63,7 @@
   function renderBoard() {
     cells.forEach((cell, index) => {
       cell.textContent = board[index];
-      cell.disabled = gameOver || board[index] !== EMPTY || currentTurn === COMPUTER;
+      cell.disabled = gameOver || board[index] !== EMPTY || currentTurn === COMPUTER || isComputerThinking;
       cell.classList.remove('cell--x', 'cell--o');
 
       if (board[index] === PLAYER) cell.classList.add('cell--x');
@@ -183,11 +185,16 @@
       return;
     }
 
+    isComputerThinking = true;
     setStatus('Computer Thinking...', 'status status--computer-turn');
     renderBoard();
 
-    setTimeout(() => {
-      if (gameOver) return;
+    computerMoveTimeout = setTimeout(() => {
+      computerMoveTimeout = null;
+      if (gameOver) {
+        isComputerThinking = false;
+        return;
+      }
 
       const move = getBestComputerMove([...board]);
       if (move >= 0) {
@@ -197,11 +204,13 @@
 
       const computerResult = findWinner(board);
       if (computerResult) {
+        isComputerThinking = false;
         renderBoard();
         finalizeGame(computerResult);
         return;
       }
 
+      isComputerThinking = false;
       currentTurn = PLAYER;
       setStatus('Player Turn', 'status status--player-turn');
       renderBoard();
@@ -210,7 +219,7 @@
 
   function handlePlayerMove(event) {
     const target = event.target.closest('.cell');
-    if (!target || gameOver || currentTurn !== PLAYER) return;
+    if (!target || gameOver || currentTurn !== PLAYER || isComputerThinking) return;
 
     const index = Number(target.dataset.index);
     if (board[index] !== EMPTY) return;
@@ -222,9 +231,15 @@
   }
 
   function resetGame() {
+    if (computerMoveTimeout) {
+      clearTimeout(computerMoveTimeout);
+      computerMoveTimeout = null;
+    }
+
     board = Array(9).fill(EMPTY);
     gameOver = false;
     currentTurn = PLAYER;
+    isComputerThinking = false;
     clearWinnerStyles();
     setStatus('Player Turn', 'status status--player-turn');
     renderBoard();
