@@ -195,9 +195,16 @@
         sounds.click();
       }
 
+      const computerResult = findWinner(board);
+      if (computerResult) {
+        renderBoard();
+        finalizeGame(computerResult);
+        return;
+      }
+
       currentTurn = PLAYER;
+      setStatus('Player Turn', 'status status--player-turn');
       renderBoard();
-      processTurnEnd();
     }, 380);
   }
 
