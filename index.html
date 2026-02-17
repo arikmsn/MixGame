@@ -20,6 +20,14 @@
       </header>
 
       <section class="game-card fade-in" aria-label="Tic Tac Toe game board">
+        <div class="starter-picker">
+          <label for="starterSelect">First Move</label>
+          <select id="starterSelect" aria-label="Choose who starts the game">
+            <option value="player" selected>Player (X)</option>
+            <option value="computer">Computer (O)</option>
+          </select>
+        </div>
+
         <div id="status" class="status status--player-turn">Player Turn</div>
 
         <div id="board" class="board" role="grid" aria-label="Tic Tac Toe board">
@@ -37,6 +45,8 @@
         <button id="restartBtn" class="restart-btn" type="button">Restart Game</button>
       </section>
     </main>
+
+    <canvas id="fireworksCanvas" class="fireworks-canvas" aria-hidden="true"></canvas>
 
     <script src="script.js"></script>
   </body>

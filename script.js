@@ -16,6 +16,8 @@
   const boardEl = document.getElementById('board');
   const statusEl = document.getElementById('status');
   const restartBtn = document.getElementById('restartBtn');
+  const starterSelect = document.getElementById('starterSelect');
+  const fireworksCanvas = document.getElementById('fireworksCanvas');
   const cells = Array.from(document.querySelectorAll('.cell'));
 
   let board = Array(9).fill(EMPTY);
@@ -23,6 +25,9 @@
   let currentTurn = PLAYER;
   let isComputerThinking = false;
   let computerMoveTimeout = null;
+
+  let fireworksAnimationFrame = null;
+  let fireworkBursts = [];
 
   // Light-weight generated tones to avoid external sound files.
   function playTone({ frequency, duration = 0.1, type = 'sine', volume = 0.05 }) {
@@ -86,19 +91,116 @@
     return null;
   }
 
+  function stopFireworks() {
+    if (fireworksAnimationFrame) {
+      cancelAnimationFrame(fireworksAnimationFrame);
+      fireworksAnimationFrame = null;
+    }
+
+    fireworkBursts = [];
+
+    const context = fireworksCanvas.getContext('2d');
+    if (context) {
+      context.clearRect(0, 0, fireworksCanvas.width, fireworksCanvas.height);
+    }
+  }
+
+  function launchFireworks(winner) {
+    stopFireworks();
+
+    const context = fireworksCanvas.getContext('2d');
+    if (!context) return;
+
+    fireworksCanvas.width = window.innerWidth;
+    fireworksCanvas.height = window.innerHeight;
+
+    const winnerColor = winner === PLAYER ? '#31c5ff' : '#ff4267';
+    const accentColor = '#9e8fff';
+
+    function spawnBurst() {
+      const centerX = Math.random() * fireworksCanvas.width * 0.8 + fireworksCanvas.width * 0.1;
+      const centerY = Math.random() * fireworksCanvas.height * 0.45 + fireworksCanvas.height * 0.1;
+      const particles = [];
+      const count = 30;
+
+      for (let i = 0; i < count; i += 1) {
+        const angle = (Math.PI * 2 * i) / count;
+        const speed = Math.random() * 3 + 1.2;
+        particles.push({
+          x: centerX,
+          y: centerY,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          life: 1,
+          color: i % 2 === 0 ? winnerColor : accentColor,
+          size: Math.random() * 2.2 + 1.3,
+        });
+      }
+
+      fireworkBursts.push({ particles });
+    }
+
+    const durationMs = 1800;
+    const start = performance.now();
+    let lastSpawn = start;
+
+    function animate(now) {
+      context.clearRect(0, 0, fireworksCanvas.width, fireworksCanvas.height);
+
+      if (now - lastSpawn > 260) {
+        spawnBurst();
+        lastSpawn = now;
+      }
+
+      fireworkBursts.forEach((burst) => {
+        burst.particles.forEach((particle) => {
+          particle.x += particle.vx;
+          particle.y += particle.vy;
+          particle.vy += 0.025;
+          particle.life -= 0.017;
+
+          if (particle.life > 0) {
+            context.globalAlpha = Math.max(particle.life, 0);
+            context.fillStyle = particle.color;
+            context.shadowColor = particle.color;
+            context.shadowBlur = 14;
+            context.beginPath();
+            context.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+            context.fill();
+          }
+        });
+      });
+
+      fireworkBursts = fireworkBursts.filter((burst) => burst.particles.some((particle) => particle.life > 0));
+
+      if (now - start < durationMs || fireworkBursts.length > 0) {
+        fireworksAnimationFrame = requestAnimationFrame(animate);
+      } else {
+        stopFireworks();
+      }
+    }
+
+    spawnBurst();
+    fireworksAnimationFrame = requestAnimationFrame(animate);
+  }
+
   function finalizeGame(result) {
     gameOver = true;
+    isComputerThinking = false;
     cells.forEach((cell) => (cell.disabled = true));
 
     if (result.winner === PLAYER) {
       setStatus('You Win', 'status status--result');
       sounds.win();
+      launchFireworks(PLAYER);
     } else if (result.winner === COMPUTER) {
       setStatus('Computer Wins', 'status status--result');
       sounds.win();
+      launchFireworks(COMPUTER);
     } else {
       setStatus('Draw', 'status status--result');
       sounds.draw();
+      stopFireworks();
     }
 
     result.combo.forEach((index) => cells[index].classList.add('cell--winner'));
@@ -170,21 +272,7 @@
     cells.forEach((cell) => cell.classList.remove('cell--winner'));
   }
 
-  function processTurnEnd() {
-    const result = findWinner(board);
-    if (result) {
-      finalizeGame(result);
-      return;
-    }
-
-    currentTurn = currentTurn === PLAYER ? COMPUTER : PLAYER;
-
-    if (currentTurn === PLAYER) {
-      setStatus('Player Turn', 'status status--player-turn');
-      renderBoard();
-      return;
-    }
-
+  function beginComputerTurn() {
     isComputerThinking = true;
     setStatus('Computer Thinking...', 'status status--computer-turn');
     renderBoard();
@@ -204,7 +292,6 @@
 
       const computerResult = findWinner(board);
       if (computerResult) {
-        isComputerThinking = false;
         renderBoard();
         finalizeGame(computerResult);
         return;
@@ -215,6 +302,24 @@
       setStatus('Player Turn', 'status status--player-turn');
       renderBoard();
     }, 380);
+  }
+
+  function processTurnEnd() {
+    const result = findWinner(board);
+    if (result) {
+      finalizeGame(result);
+      return;
+    }
+
+    currentTurn = currentTurn === PLAYER ? COMPUTER : PLAYER;
+
+    if (currentTurn === PLAYER) {
+      setStatus('Player Turn', 'status status--player-turn');
+      renderBoard();
+      return;
+    }
+
+    beginComputerTurn();
   }
 
   function handlePlayerMove(event) {
@@ -236,17 +341,33 @@
       computerMoveTimeout = null;
     }
 
+    stopFireworks();
     board = Array(9).fill(EMPTY);
     gameOver = false;
-    currentTurn = PLAYER;
     isComputerThinking = false;
     clearWinnerStyles();
-    setStatus('Player Turn', 'status status--player-turn');
+
+    currentTurn = starterSelect.value === 'computer' ? COMPUTER : PLAYER;
+
+    if (currentTurn === PLAYER) {
+      setStatus('Player Turn', 'status status--player-turn');
+      renderBoard();
+      return;
+    }
+
+    setStatus('Computer Starts', 'status status--computer-turn');
     renderBoard();
+    beginComputerTurn();
   }
 
   boardEl.addEventListener('click', handlePlayerMove);
   restartBtn.addEventListener('click', resetGame);
+
+  window.addEventListener('resize', () => {
+    if (!fireworkBursts.length) return;
+    fireworksCanvas.width = window.innerWidth;
+    fireworksCanvas.height = window.innerHeight;
+  });
 
   resetGame();
 })();
